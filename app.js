@@ -92,6 +92,7 @@ const SCREENS = [
   { id: 'worklist', label: 'Worklist' },
   { id: 'verify', label: 'Verify', need: r => r === 'verifier' || r === 'both' },
   { id: 'staff', label: 'Staff', need: r => r === 'both' },
+  { id: 'log', label: 'Log', need: r => r === 'both' },
 ];
 function renderNav(role) {
   $('#nav').innerHTML = '';
@@ -109,6 +110,7 @@ function navTo(id) {
   if (id === 'worklist') loadWorklist();
   if (id === 'verify') loadVerify();
   if (id === 'staff') loadStaff();
+  if (id === 'log') loadAuditLog();
 }
 
 /* ───────── search widget ───────── */
@@ -297,6 +299,7 @@ $('#impFile').onchange = async e => {
     <div><b>${after - before}</b><span class="muted small">newly added</span></div>
     <div><b>${redacted}</b><span class="muted small">redacted skipped</span></div></div>
     <p class="muted small">Existing members untouched. Roster now ${after}.</p>`;
+  await sb.rpc('log_action', { p_action: 'import.run', p_detail: { rows: rows.length, unique: unique.length, added: after - before, redacted } });
   toast(`Import done — ${after - before} new`, 'ok');
   e.target.value = '';
 };
@@ -415,5 +418,39 @@ async function loadStaff() {
     if (error) toast(error.message, 'err'); else loadStaff();
   });
 }
+
+/* ───────── audit log (admin) ───────── */
+function fmtDetail(a, d) {
+  d = d || {};
+  if (a.startsWith('event.')) {
+    let s = d.type || '';
+    const p = d.payload;
+    if (p) {
+      if (d.type === 'credit_consume') s += ` · ${p.credit_type} ×${p.qty || 1}`;
+      else if (d.type === 'package_purchase') s += ` · ${esc(p.name || '')} ${p.free ? '(free)' : fmt(p.price_cents)}`;
+      else if (d.type === 'account_create') s += ` · ${esc(((p.first_name || '') + ' ' + (p.last_name || '')).trim())}`;
+    }
+    if (d.from && d.to && d.from !== d.to) s += `  [${d.from}→${d.to}]`;
+    return s;
+  }
+  if (a === 'import.run') return `${d.added} new · ${d.rows} rows · ${d.unique} unique`;
+  if (a.startsWith('individual.')) return esc(d.full_name || '') + (d.barcode ? ` · #${esc(d.barcode)}` : '');
+  if (a === 'staff.update') return `${esc(d.name || '')} · role ${d.role_from}→${d.role_to} · active ${d.active_from}→${d.active_to}`;
+  if (a === 'staff.signup') return `${esc(d.name || '')} · ${d.role}`;
+  return esc(JSON.stringify(d));
+}
+async function loadAuditLog() {
+  const { data, error } = await sb.from('audit_log').select('*').order('id', { ascending: false }).limit(300);
+  const body = $('#logBody');
+  if (error) { body.innerHTML = `<span style="color:var(--bad)">${esc(error.message)}</span>`; return; }
+  if (!data.length) { body.innerHTML = '<span class="muted">No activity yet.</span>'; return; }
+  body.innerHTML = `<table><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr>` +
+    data.map(r => `<tr>
+      <td class="small muted" style="white-space:nowrap">${esc(new Date(r.at).toLocaleString())}</td>
+      <td>${esc(r.actor_name || 'system')}</td>
+      <td><span class="pill">${esc(r.action)}</span></td>
+      <td class="small">${fmtDetail(r.action, r.detail)}</td></tr>`).join('') + '</table>';
+}
+$('#logRefresh').onclick = e => { e.preventDefault(); loadAuditLog(); };
 
 boot();
