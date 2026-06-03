@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Offline Hapana Twin — SBH</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#f6f1ea; --card:#fffdf9; --ink:#2c2620; --muted:#7a7065;
+    --accent:#8b5a3c; --accent-soft:#f0e4d8; --line:#e7ddd0;
+    --ok:#4f7a4f; --warn:#9a6a2f; --bad:#9a4f4f; --radius:15px;
+    --shadow:0 1px 2px rgba(139,90,60,.05),0 6px 22px rgba(139,90,60,.07);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{font-family:"Newsreader","Iowan Old Style",Charter,Georgia,serif;font-weight:600;letter-spacing:-.01em;margin:0}
+  h1{font-size:1.5rem} h2{font-size:1.25rem} h3{font-size:1.05rem}
+  a{color:var(--accent)}
+  button{font:inherit;cursor:pointer;border:none;border-radius:11px;padding:.6rem 1rem;
+    background:var(--accent);color:#fff;transition:filter .15s,background .15s}
+  button:hover{filter:brightness(1.07)} button:disabled{opacity:.45;cursor:not-allowed;filter:none}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+  button.ghost:hover{background:var(--accent-soft);filter:none}
+  button.sm{padding:.35rem .7rem;font-size:.85rem;border-radius:9px}
+  input,select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:.55rem .7rem;width:100%}
+  input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  label{display:block;font-size:.8rem;color:var(--muted);margin:0 0 .25rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:1.25rem}
+  .wrap{max-width:880px;margin:0 auto;padding:1rem}
+  .row{display:flex;gap:.75rem;flex-wrap:wrap}
+  .row>*{flex:1;min-width:140px}
+  .muted{color:var(--muted)} .small{font-size:.82rem}
+  .pill{display:inline-block;font-size:.72rem;padding:.12rem .5rem;border-radius:99px;
+    background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .pill.new{background:#efe2d2;color:var(--warn)} .pill.ok{background:#e3eede;color:var(--ok)}
+  .hidden{display:none!important}
+  /* header / nav */
+  header{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  .hbar{max-width:880px;margin:0 auto;padding:.7rem 1rem;display:flex;align-items:center;gap:1rem}
+  .brand{display:flex;align-items:center;gap:.55rem;font-family:"Newsreader",serif;font-weight:600;font-size:1.1rem}
+  .dot{width:9px;height:9px;border-radius:99px;background:var(--accent)}
+  nav{display:flex;gap:.2rem;flex-wrap:wrap}
+  nav button{background:transparent;color:var(--muted);border-radius:9px;padding:.4rem .7rem;font-size:.9rem}
+  nav button:hover{background:var(--accent-soft);color:var(--accent);filter:none}
+  nav button.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .spacer{flex:1}
+  .chip{font-size:.82rem;color:var(--muted);display:flex;align-items:center;gap:.5rem}
+  /* search results */
+  .results{margin-top:.5rem;border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .results .item{padding:.55rem .8rem;border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:.5rem}
+  .results .item:last-child{border-bottom:none}
+  .results .item:hover{background:var(--accent-soft)}
+  .selbox{margin-top:.75rem;padding:.8rem;border:1px dashed var(--accent);border-radius:11px;background:#fbf6ef}
+  .big-btn{padding:1rem;font-size:1.05rem;border-radius:13px}
+  .wl-group{border:1px solid var(--line);border-radius:13px;padding:1rem;margin-bottom:1rem;background:var(--card)}
+  .wl-line{display:flex;align-items:flex-start;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--line)}
+  .wl-line:first-of-type{border-top:none}
+  .chk{display:flex;align-items:center;gap:.4rem;font-size:.85rem;cursor:pointer;white-space:nowrap}
+  .chk input{width:auto}
+  .payload{background:#faf5ee;border:1px solid var(--line);border-radius:9px;padding:.5rem .7rem;font-size:.85rem;margin:.3rem 0}
+  .payload b{font-weight:600}
+  .toast{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:.7rem 1.1rem;border-radius:11px;box-shadow:var(--shadow);
+    opacity:0;transition:opacity .2s,transform .2s;z-index:50;font-size:.9rem;max-width:90vw}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  .toast.err{background:var(--bad)} .toast.ok{background:var(--ok)}
+  .notice{padding:.8rem 1rem;border-radius:11px;background:#fbf1e3;border:1px solid #ecd9bf;color:var(--warn);margin-bottom:1rem}
+  .stat{display:flex;gap:1.5rem;flex-wrap:wrap;margin:.5rem 0}
+  .stat div b{font-family:"Newsreader",serif;font-size:1.4rem;display:block;color:var(--accent)}
+  table{width:100%;border-collapse:collapse;font-size:.88rem}
+  th,td{text-align:left;padding:.45rem .5rem;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:.78rem}
+  .section-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem;gap:1rem}
+</style>
+</head>
+<body>
+
+<!-- ───────── LOGIN ───────── -->
+<div id="login" class="wrap hidden" style="max-width:420px;margin-top:8vh">
+  <div class="card">
+    <div class="brand" style="margin-bottom:.3rem"><span class="dot"></span> Offline Hapana Twin</div>
+    <p class="muted small" style="margin:.2rem 0 1.2rem">Sauna Bath House · staff capture &amp; Hapana port worklist</p>
+    <div id="loginForm">
+      <label>Email</label><input id="liEmail" type="email" autocomplete="username" />
+      <div style="height:.6rem"></div>
+      <label>Password</label><input id="liPass" type="password" autocomplete="current-password" />
+      <div id="liName" class="hidden" style="margin-top:.6rem"><label>Your name</label><input id="liNameInput" type="text" /></div>
+      <div style="height:1rem"></div>
+      <button id="liBtn" style="width:100%">Sign in</button>
+      <p class="small muted" style="margin-top:.9rem">
+        <span id="liToggleTxt">New staff?</span>
+        <a href="#" id="liToggle">Create an account</a>
+      </p>
+      <p id="liMsg" class="small" style="min-height:1rem"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── APP ───────── -->
+<div id="app" class="hidden">
+  <header>
+    <div class="hbar">
+      <div class="brand"><span class="dot"></span> Hapana Twin</div>
+      <nav id="nav"></nav>
+      <span class="spacer"></span>
+      <span class="chip"><span id="whoName"></span><span class="pill" id="whoRole"></span>
+        <button class="sm ghost" id="logoutBtn">Log out</button></span>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div id="pendingBanner" class="notice hidden">
+      Your account is awaiting admin activation. You can sign in, but you won’t see customer data until an admin activates you.
+    </div>
+
+    <!-- CHECK-IN / USE CREDIT -->
+    <section id="screen-checkin" class="screen">
+      <div class="section-head"><h2>Check-in · use 1 credit</h2><span class="muted small">the visit <i>is</i> the credit</span></div>
+      <div class="card">
+        <label>Find member (name, email, or phone)</label>
+        <input id="ciSearch" placeholder="Start typing a name…" />
+        <div id="ciResults"></div>
+        <div id="ciSelected"></div>
+      </div>
+    </section>
+
+    <!-- NEW CUSTOMER -->
+    <section id="screen-newcustomer" class="screen hidden">
+      <div class="section-head"><h2>New customer</h2><span class="muted small">creates a port task → Hapana</span></div>
+      <div class="card">
+        <div class="row"><div><label>First name</label><input id="ncFirst" /></div><div><label>Last name</label><input id="ncLast" /></div></div>
+        <div style="height:.6rem"></div>
+        <div class="row"><div><label>Phone</label><input id="ncPhone" /></div><div><label>Email</label><input id="ncEmail" type="email" /></div></div>
+        <div style="height:.6rem"></div>
+        <div class="row"><div style="max-width:220px"><label>Birthday</label><input id="ncBday" type="date" /></div><div></div></div>
+        <div style="height:1rem"></div>
+        <button id="ncSave">Create customer</button>
+      </div>
+    </section>
+
+    <!-- ADD PACKAGE -->
+    <section id="screen-package" class="screen hidden">
+      <div class="section-head"><h2>Add package</h2><span class="muted small">price from catalogue · or custom · or free comp</span></div>
+      <div class="card">
+        <label>Find member</label>
+        <input id="pkSearch" placeholder="Start typing a name…" />
+        <div id="pkResults"></div>
+        <div id="pkSelected" class="hidden">
+          <div class="selbox" id="pkSelCard"></div>
+          <div style="height:.8rem"></div>
+          <label>Package</label>
+          <select id="pkSelect"></select>
+          <div style="height:.6rem"></div>
+          <div class="row">
+            <div style="max-width:180px"><label>Price (SGD)</label><input id="pkPrice" type="number" step="0.01" /></div>
+            <div style="max-width:200px"><label>Payment method</label>
+              <select id="pkMethod"><option>Cash</option><option>Card</option><option>Stripe</option><option>Other</option></select></div>
+            <div style="display:flex;align-items:flex-end;gap:1rem">
+              <label class="chk"><input type="checkbox" id="pkMember" /> Member price</label>
+              <label class="chk"><input type="checkbox" id="pkFree" /> Free (staff comp)</label>
+            </div>
+          </div>
+          <div style="height:1rem"></div>
+          <button id="pkSave">Add package</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- IMPORT -->
+    <section id="screen-import" class="screen hidden">
+      <div class="section-head"><h2>Daily import</h2><span class="muted small">~21:10 check-in CSV · only-add-new</span></div>
+      <div class="card">
+        <p class="small muted">Upload the full Hapana check-in export. Matched on <b>Barcode</b>; existing members are left untouched, only new ones are added. Redacted rows are skipped.</p>
+        <input id="impFile" type="file" accept=".csv" />
+        <div id="impResult" style="margin-top:1rem"></div>
+      </div>
+    </section>
+
+    <!-- WORKLIST (maker) -->
+    <section id="screen-worklist" class="screen hidden">
+      <div class="section-head"><h2>Port worklist</h2>
+        <span class="muted small">tick each step as you do it in Hapana · <a href="#" id="wlToVerify">awaiting verification →</a></span></div>
+      <div id="wlBody"></div>
+    </section>
+
+    <!-- VERIFY (checker) -->
+    <section id="screen-verify" class="screen hidden">
+      <div class="section-head"><h2>Verification</h2><span class="muted small">maker ≠ checker · you can’t verify your own</span></div>
+      <div id="vfBody"></div>
+    </section>
+
+    <!-- STAFF (admin) -->
+    <section id="screen-staff" class="screen hidden">
+      <div class="section-head"><h2>Staff</h2><span class="muted small">activate accounts · assign roles</span></div>
+      <div id="stBody" class="card"></div>
+    </section>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+window.SUPA_URL = "https://escyonbsziqcqltceyxr.supabase.co";
+window.SUPA_KEY = "sb_publishable_mHkvAtu6M-yP75U6L0hgwg_yjWt75_P";
+</script>
+<script src="app.js"></script>
+</body>
+</html>

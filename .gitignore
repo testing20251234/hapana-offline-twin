@@ -1,0 +1,6 @@
+# Customer PII — never commit to a public repo
+db/roster.sql
+*.csv
+inbox/
+.DS_Store
+node_modules/
