@@ -12,6 +12,7 @@ create table if not exists public.profiles (
   name       text not null,
   role       text not null default 'entry' check (role in ('entry','verifier','both')),
   active     boolean not null default false,
+  is_super   boolean not null default false,   -- super: may self-verify (bypass maker≠checker)
   created_at timestamptz not null default now()
 );
 
@@ -105,10 +106,19 @@ create trigger on_auth_user_created after insert on auth.users
 -- ───────────────────────── maker ≠ checker enforcement ──────────────
 create or replace function public.enforce_maker_checker() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare r text;
+declare r text; sup boolean; act boolean;
 begin
   if new.port_status = 'verified' and old.port_status is distinct from 'verified' then
-    select role into r from public.profiles where id = auth.uid() and active;
+    select role, is_super, active into r, sup, act from public.profiles where id = auth.uid();
+    if not coalesce(act, false) then
+      raise exception 'Only an active staff member can verify';
+    end if;
+    -- super users may verify anything, including their own work
+    if coalesce(sup, false) then
+      new.verified_by := auth.uid(); new.verified_at := now();
+      return new;
+    end if;
+    -- everyone else: must be a verifier AND must not be the maker
     if r is null or r not in ('verifier','both') then
       raise exception 'Only an active verifier can verify';
     end if;
@@ -123,6 +133,10 @@ end $$;
 drop trigger if exists trg_maker_checker on public.events;
 create trigger trg_maker_checker before update on public.events
   for each row execute function public.enforce_maker_checker();
+
+-- trigger functions must never be callable via PostgREST RPC
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.enforce_maker_checker() from public, anon, authenticated;
 
 -- ───────────────────────── RLS ──────────────────────────────────────
 alter table public.profiles    enable row level security;
