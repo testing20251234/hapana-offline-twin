@@ -95,7 +95,8 @@ const SCREENS = [
 ];
 function renderNav(role) {
   $('#nav').innerHTML = '';
-  SCREENS.filter(s => !s.need || s.need(role)).forEach(s => {
+  const canSee = s => !s.need || s.need(role) || (s.id === 'verify' && state.profile.is_super);
+  SCREENS.filter(canSee).forEach(s => {
     const b = document.createElement('button');
     b.textContent = s.label; b.dataset.screen = s.id; b.onclick = () => navTo(s.id);
     $('#nav').appendChild(b);
@@ -374,7 +375,8 @@ async function loadVerify() {
   if (!data.length) { body.innerHTML = '<div class="card muted">Nothing awaiting verification.</div>'; return; }
   body.innerHTML = data.map(ev => {
     const ind = ev.individuals, p = ev.payload || {};
-    const mine = ev.entered_by === state.user.id || ev.ported_by === state.user.id;
+    const own = ev.entered_by === state.user.id || ev.ported_by === state.user.id;
+    const blocked = own && !state.profile.is_super;   // super users may self-verify
     let summary = ev.type === 'account_create' ? `New account · ${esc(p.first_name)} ${esc(p.last_name)}`
       : ev.type === 'package_purchase' ? `Package · ${esc(p.name)} ${p.free ? '(free)' : fmt(p.price_cents)}`
         : `Credit · ${esc(p.credit_type)} ×${p.qty || 1}`;
@@ -383,7 +385,7 @@ async function loadVerify() {
     return `<div class="wl-group" style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
       <div><b>${esc(ind.full_name)}</b> — ${summary}
         <div class="muted small">entered by ${esc(enteredBy)} · ported by ${esc(portedBy)}</div></div>
-      <button class="sm" data-vf="${ev.id}" ${mine ? 'disabled title="you handled this — maker ≠ checker"' : ''}>${mine ? 'your task' : 'Verify ✓'}</button>
+      <button class="sm" data-vf="${ev.id}" ${blocked ? 'disabled title="you handled this — maker ≠ checker"' : ''}>${blocked ? 'your task' : (own ? 'Verify ✓ (self)' : 'Verify ✓')}</button>
     </div>`;
   }).join('');
   body.querySelectorAll('[data-vf]').forEach(b => b.onclick = async () => {
