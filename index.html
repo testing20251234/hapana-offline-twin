@@ -173,6 +173,63 @@
       </div>
     </section>
 
+    <!-- HATS (local inventory) -->
+    <section id="screen-hats" class="screen hidden">
+      <div class="section-head"><h2>Sauna hats</h2><span class="muted small">local inventory · does <i>not</i> touch Hapana</span></div>
+
+      <div class="card" style="margin-bottom:1rem">
+        <div class="stat">
+          <div><b id="hatOnHand">—</b><span class="muted small">hats in stock</span></div>
+          <div><b id="hatInTot">—</b><span class="muted small">purchased (in)</span></div>
+          <div><b id="hatOutTot">—</b><span class="muted small">to customers (out)</span></div>
+        </div>
+      </div>
+
+      <div class="row" style="align-items:stretch">
+        <!-- stock in -->
+        <div class="card" style="min-width:280px">
+          <h3 style="margin-bottom:.4rem">Add stock</h3>
+          <p class="muted small" style="margin-top:0">Hats we bought into inventory.</p>
+          <div class="row">
+            <div style="max-width:110px"><label>Qty</label><input id="hiQty" type="number" min="1" step="1" value="1" /></div>
+            <div style="max-width:160px"><label>Unit cost (SGD)</label><input id="hiCost" type="number" step="0.01" placeholder="optional" /></div>
+          </div>
+          <div style="height:.6rem"></div>
+          <label>Note</label><input id="hiNote" placeholder="e.g. supplier / batch" />
+          <div style="height:1rem"></div>
+          <button id="hiSave">Add to stock</button>
+        </div>
+
+        <!-- stock out -->
+        <div class="card" style="min-width:280px">
+          <h3 style="margin-bottom:.4rem">Sell / give a hat</h3>
+          <p class="muted small" style="margin-top:0">A hat leaves stock. Link a customer (optional).</p>
+          <label>Customer (optional)</label>
+          <input id="hoSearch" placeholder="Start typing a name…" />
+          <div id="hoResults"></div>
+          <div id="hoSelected"></div>
+          <div style="height:.6rem"></div>
+          <div class="row">
+            <div style="max-width:100px"><label>Qty</label><input id="hoQty" type="number" min="1" step="1" value="1" /></div>
+            <div style="max-width:140px"><label>Price (SGD)</label><input id="hoPrice" type="number" step="0.01" /></div>
+            <div style="max-width:150px"><label>Payment</label>
+              <select id="hoMethod"><option>Cash</option><option>Card</option><option>Stripe</option><option>Other</option></select></div>
+          </div>
+          <div style="height:.5rem"></div>
+          <div style="display:flex;gap:1.2rem;align-items:center;flex-wrap:wrap">
+            <label class="chk"><input type="checkbox" id="hoMember" /> Member price ($39)</label>
+            <label class="chk"><input type="checkbox" id="hoFree" /> Free / comp</label>
+          </div>
+          <div style="height:1rem"></div>
+          <button id="hoSave">Log hat out</button>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top:1.5rem"><h3>Recent records</h3>
+        <span class="muted small">append-only · cancel keeps the record · <a href="#" id="hatRefresh">refresh</a></span></div>
+      <div id="hatBody"></div>
+    </section>
+
     <!-- IMPORT -->
     <section id="screen-import" class="screen hidden">
       <div class="section-head"><h2>Daily import</h2><span class="muted small">~21:10 check-in CSV · only-add-new</span></div>
@@ -219,6 +276,6 @@
 window.SUPA_URL = "https://escyonbsziqcqltceyxr.supabase.co";
 window.SUPA_KEY = "sb_publishable_mHkvAtu6M-yP75U6L0hgwg_yjWt75_P";
 </script>
-<script src="app.js?v=20260603c"></script>
+<script src="app.js?v=20260609a"></script>
 </body>
 </html>

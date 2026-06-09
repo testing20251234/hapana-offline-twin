@@ -2,6 +2,8 @@
    Spec: claude-code-test/project-hapana-offline-twin/bedrock-spec-hapana-offline-twin.md */
 const sb = window.supabase.createClient(window.SUPA_URL, window.SUPA_KEY);
 const state = { user: null, profile: null, packages: [], profilesMap: {} };
+// Sauna hat — EXPERIMENTAL retail price (project-pricing/experimental-pricing.md, 2026-06-09). Editable per sale.
+const HAT_STD_CENTS = 4500, HAT_MEM_CENTS = 3900;
 
 /* ───────── helpers ───────── */
 const $ = s => document.querySelector(s);
@@ -88,6 +90,7 @@ const SCREENS = [
   { id: 'checkin', label: 'Check-in' },
   { id: 'newcustomer', label: 'New customer' },
   { id: 'package', label: 'Add package' },
+  { id: 'hats', label: 'Hats' },
   { id: 'import', label: 'Import' },
   { id: 'worklist', label: 'Worklist' },
   { id: 'verify', label: 'Verify', need: r => r === 'verifier' || r === 'both' },
@@ -107,6 +110,7 @@ function navTo(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   $('#screen-' + id)?.classList.remove('hidden');
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.screen === id));
+  if (id === 'hats') loadHats();
   if (id === 'worklist') loadWorklist();
   if (id === 'verify') loadVerify();
   if (id === 'staff') loadStaff();
@@ -246,6 +250,95 @@ $('#pkSave').onclick = async () => {
     $('#pkSelect').value = ''; $('#pkPrice').value = ''; $('#pkFree').checked = false; $('#pkMember').checked = false;
   }
 };
+
+/* ───────── sauna hats (local inventory — never ports to Hapana) ───────── */
+let hoPerson = null;
+wireSearch('#hoSearch', '#hoResults', person => {
+  hoPerson = person; $('#hoSearch').value = '';
+  $('#hoSelected').innerHTML = `<div class="selbox" style="display:flex;justify-content:space-between;align-items:center">
+    <div><b>${esc(person.full_name)}</b> ${person.hapana_state === 'new_local' ? '<span class="pill new">new local</span>' : ''}
+      <div class="muted small">${esc(person.phone || '')} ${esc(person.email || '')}</div></div>
+    <button class="ghost sm" id="hoClear">clear</button></div>`;
+  $('#hoClear').onclick = () => { hoPerson = null; $('#hoSelected').innerHTML = ''; };
+});
+function hatRecalc() {
+  if ($('#hoFree').checked) { $('#hoPrice').value = '0.00'; $('#hoPrice').disabled = true; $('#hoMethod').disabled = true; $('#hoMember').disabled = true; return; }
+  $('#hoPrice').disabled = false; $('#hoMethod').disabled = false; $('#hoMember').disabled = false;
+  $('#hoPrice').value = (($('#hoMember').checked ? HAT_MEM_CENTS : HAT_STD_CENTS) / 100).toFixed(2);
+}
+async function insertHat(row) {
+  const { error } = await sb.from('hat_events').insert({ ...row, entered_by: state.user.id });
+  if (error) { toast(error.message, 'err'); return false; }
+  return true;
+}
+$('#hiSave').onclick = async () => {
+  const qty = parseInt($('#hiQty').value || '1', 10);
+  if (!(qty > 0)) { toast('Qty must be ≥ 1', 'err'); return; }
+  const cost = $('#hiCost').value ? Math.round(parseFloat($('#hiCost').value) * 100) : null;
+  const ok = await insertHat({ kind: 'in', qty, unit_price_cents: cost, note: $('#hiNote').value.trim() || null });
+  if (ok) { toast(`Added ${qty} hat(s) to stock`, 'ok'); $('#hiQty').value = '1'; $('#hiCost').value = ''; $('#hiNote').value = ''; loadHats(); }
+};
+$('#hoSave').onclick = async () => {
+  const qty = parseInt($('#hoQty').value || '1', 10);
+  if (!(qty > 0)) { toast('Qty must be ≥ 1', 'err'); return; }
+  const free = $('#hoFree').checked;
+  const ok = await insertHat({
+    kind: 'out', qty,
+    unit_price_cents: free ? 0 : Math.round(parseFloat($('#hoPrice').value || '0') * 100),
+    member_price: $('#hoMember').checked && !free,
+    payment_method: free ? 'comp' : $('#hoMethod').value,
+    individual_id: hoPerson ? hoPerson.id : null
+  });
+  if (ok) {
+    toast(`Logged ${qty} hat(s) out`, 'ok');
+    hoPerson = null; $('#hoSelected').innerHTML = '';
+    $('#hoQty').value = '1'; $('#hoMember').checked = false; $('#hoFree').checked = false; hatRecalc();
+    loadHats();
+  }
+};
+$('#hoMember').onchange = hatRecalc;
+$('#hoFree').onchange = hatRecalc;
+$('#hatRefresh').onclick = e => { e.preventDefault(); loadHats(); };
+async function setHatStatus(id, status) {
+  const { error } = await sb.from('hat_events').update({ status }).eq('id', id);
+  if (error) { toast(error.message, 'err'); return; }
+  toast(status === 'cancelled' ? 'Record cancelled' : 'Record restored', 'ok');
+  loadHats();
+}
+async function loadHats() {
+  hatRecalc();
+  const isAdmin = state.profile.role === 'both' || state.profile.is_super;
+  const { data, error } = await sb.from('hat_events').select('*, individuals(full_name)').order('entered_at', { ascending: false }).limit(200);
+  const body = $('#hatBody');
+  if (error) { body.innerHTML = `<div class="card" style="color:var(--bad)">${esc(error.message)}</div>`; return; }
+  let inTot = 0, outTot = 0;
+  data.forEach(r => { if (r.status === 'active') { if (r.kind === 'in') inTot += r.qty; else outTot += r.qty; } });
+  $('#hatOnHand').textContent = inTot - outTot; $('#hatInTot').textContent = inTot; $('#hatOutTot').textContent = outTot;
+  if (!data.length) { body.innerHTML = '<div class="card muted">No hat records yet. Add stock or log a hat out above.</div>'; return; }
+  body.innerHTML = '<div class="card" style="padding:0;overflow-x:auto"><table><tr><th>When</th><th>Type</th><th>Qty</th><th>Price</th><th>Customer</th><th>By</th><th></th></tr>' +
+    data.map(r => {
+      const cancelled = r.status === 'cancelled';
+      const by = state.profilesMap[r.entered_by]?.name || '';
+      const cust = r.individuals?.full_name ? esc(r.individuals.full_name) : '<span class="muted">—</span>';
+      const kindPill = r.kind === 'in' ? '<span class="pill ok">＋ stock in</span>' : '<span class="pill">－ to customer</span>';
+      const price = r.kind === 'in'
+        ? (r.unit_price_cents != null ? `${fmt(r.unit_price_cents)} cost` : '<span class="muted">—</span>')
+        : (r.payment_method === 'comp' ? 'FREE' : `${fmt(r.unit_price_cents)}${r.member_price ? ' <span class="muted small">mbr</span>' : ''}`);
+      const cancelInfo = (cancelled && isAdmin)
+        ? `<div class="muted small">cancelled by ${esc(state.profilesMap[r.cancelled_by]?.name || '—')}${r.cancelled_at ? ' · ' + new Date(r.cancelled_at).toLocaleString() : ''}</div>`
+        : '';
+      const btn = cancelled
+        ? `<button class="sm ghost" data-uncancel="${r.id}">un-cancel</button>`
+        : `<button class="sm ghost" data-cancel="${r.id}">cancel</button>`;
+      return `<tr style="${cancelled ? 'opacity:.5' : ''}">
+        <td class="small muted" style="white-space:nowrap">${esc(new Date(r.entered_at).toLocaleString())}</td>
+        <td>${kindPill}${cancelled ? ' <span class="pill new">cancelled</span>' : ''}${cancelInfo}</td>
+        <td>${r.qty}</td><td class="small">${price}</td><td class="small">${cust}</td>
+        <td class="small">${esc(by)}</td><td>${btn}</td></tr>`;
+    }).join('') + '</table></div>';
+  body.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => { if (confirm('Cancel this hat record? It stays in the log (append-only); admins see who cancelled it.')) setHatStatus(b.dataset.cancel, 'cancelled'); });
+  body.querySelectorAll('[data-uncancel]').forEach(b => b.onclick = () => setHatStatus(b.dataset.uncancel, 'active'));
+}
 
 /* ───────── import ───────── */
 function parseCSV(text) {
@@ -431,6 +524,14 @@ function fmtDetail(a, d) {
       else if (d.type === 'account_create') s += ` · ${esc(((p.first_name || '') + ' ' + (p.last_name || '')).trim())}`;
     }
     if (d.from && d.to && d.from !== d.to) s += `  [${d.from}→${d.to}]`;
+    return s;
+  }
+  if (a.startsWith('hat.')) {
+    let s = (d.kind === 'in' ? '＋in' : '－out') + ` ×${d.qty}`;
+    if (d.payment_method === 'comp') s += ' · FREE';
+    else if (d.unit_price_cents != null) s += ' · ' + fmt(d.unit_price_cents) + (d.member_price ? ' mbr' : '');
+    if (d.customer) s += ' · ' + esc(d.customer);
+    if (d.status === 'cancelled') s += '  [cancelled]';
     return s;
   }
   if (a === 'import.run') return `${d.added} new · ${d.rows} rows · ${d.unique} unique`;
