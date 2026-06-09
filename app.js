@@ -319,6 +319,7 @@ async function setHatStatus(id, status) {
 async function loadHats() {
   hatRecalc();
   const isAdmin = state.profile.role === 'both' || state.profile.is_super;
+  $('#hatInCard')?.classList.toggle('hidden', !isAdmin);   // stock-in is admin-only (RLS-enforced too)
   const { data, error } = await sb.from('hat_events').select('*, individuals(full_name)').order('entered_at', { ascending: false }).limit(200);
   const body = $('#hatBody');
   if (error) { body.innerHTML = `<div class="card" style="color:var(--bad)">${esc(error.message)}</div>`; return; }
@@ -341,9 +342,11 @@ async function loadHats() {
       const cancelInfo = (cancelled && isAdmin)
         ? `<div class="muted small">cancelled by ${esc(state.profilesMap[r.cancelled_by]?.name || '—')}${r.cancelled_at ? ' · ' + new Date(r.cancelled_at).toLocaleString() : ''}</div>`
         : '';
-      const btn = cancelled
-        ? `<button class="sm ghost" data-uncancel="${r.id}">un-cancel</button>`
-        : `<button class="sm ghost" data-cancel="${r.id}">cancel</button>`;
+      const canCancel = isAdmin || r.kind === 'out';   // staff cancel only sales; stock-in is admin-only
+      const btn = !canCancel ? ''
+        : cancelled
+          ? `<button class="sm ghost" data-uncancel="${r.id}">un-cancel</button>`
+          : `<button class="sm ghost" data-cancel="${r.id}">cancel</button>`;
       return `<tr style="${cancelled ? 'opacity:.5' : ''}">
         <td class="small muted" style="white-space:nowrap">${esc(new Date(r.entered_at).toLocaleString())}</td>
         <td>${kindPill}${cancelled ? ' <span class="pill new">cancelled</span>' : ''}${cancelInfo}</td>

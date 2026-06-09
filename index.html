@@ -182,8 +182,8 @@
       </div>
 
       <div class="row" style="align-items:stretch">
-        <!-- stock in -->
-        <div class="card" style="min-width:280px">
+        <!-- stock in (admin only) -->
+        <div class="card" id="hatInCard" style="min-width:280px">
           <h3 style="margin-bottom:.4rem">Add stock</h3>
           <p class="muted small" style="margin-top:0">Hats we bought into inventory.</p>
           <label>Hat type</label><select id="hiType"></select>
@@ -213,7 +213,7 @@
             <div style="max-width:100px"><label>Qty</label><input id="hoQty" type="number" min="1" step="1" value="1" /></div>
             <div style="max-width:140px"><label>Price (SGD)</label><input id="hoPrice" type="number" step="0.01" /></div>
             <div style="max-width:150px"><label>Payment</label>
-              <select id="hoMethod"><option>Cash</option><option>Card</option><option>Stripe</option><option>Other</option></select></div>
+              <select id="hoMethod"><option>Cash</option><option>Koomi Pay</option></select></div>
           </div>
           <div style="height:.5rem"></div>
           <div style="display:flex;gap:1.2rem;align-items:center;flex-wrap:wrap">
@@ -276,6 +276,6 @@
 window.SUPA_URL = "https://escyonbsziqcqltceyxr.supabase.co";
 window.SUPA_KEY = "sb_publishable_mHkvAtu6M-yP75U6L0hgwg_yjWt75_P";
 </script>
-<script src="app.js?v=20260609b"></script>
+<script src="app.js?v=20260609c"></script>
 </body>
 </html>
