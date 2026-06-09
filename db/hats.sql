@@ -18,9 +18,13 @@
 --   audit_log read is is_admin() only → who/when cancellation forensics are admin-only,
 --   matching the staff-app-vs-admin-backend split the owner asked for.
 
+-- Variants tracked via hat_type (migration: hat_inventory_add_type). Values are app-defined
+-- (HAT_TYPES in app.js: burgundy_rose, saddle_brown) — no DB enum, so a new type needs no migration.
+-- On-hand is computed PER hat_type.
 create table if not exists public.hat_events (
   id               uuid primary key default gen_random_uuid(),
   kind             text not null check (kind in ('in','out')),
+  hat_type         text,                                          -- variant key, e.g. burgundy_rose
   qty              int  not null default 1 check (qty > 0),
   unit_price_cents int,
   member_price     boolean not null default false,

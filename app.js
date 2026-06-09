@@ -4,6 +4,12 @@ const sb = window.supabase.createClient(window.SUPA_URL, window.SUPA_KEY);
 const state = { user: null, profile: null, packages: [], profilesMap: {} };
 // Sauna hat — EXPERIMENTAL retail price (project-pricing/experimental-pricing.md, 2026-06-09). Editable per sale.
 const HAT_STD_CENTS = 4500, HAT_MEM_CENTS = 3900;
+// Hat variants. Add a row here (+ deploy) to introduce a new type.
+const HAT_TYPES = [
+  { key: 'burgundy_rose', label: 'Burgundy Rose' },
+  { key: 'saddle_brown', label: 'Saddle Brown' },
+];
+const hatTypeLabel = k => (HAT_TYPES.find(t => t.key === k) || {}).label || k || '—';
 
 /* ───────── helpers ───────── */
 const $ = s => document.querySelector(s);
@@ -252,6 +258,11 @@ $('#pkSave').onclick = async () => {
 };
 
 /* ───────── sauna hats (local inventory — never ports to Hapana) ───────── */
+function fillHatTypes() {
+  const opts = HAT_TYPES.map(t => `<option value="${t.key}">${esc(t.label)}</option>`).join('');
+  ['#hiType', '#hoType'].forEach(s => { const el = $(s); if (el) el.innerHTML = opts; });
+}
+fillHatTypes();
 let hoPerson = null;
 wireSearch('#hoSearch', '#hoResults', person => {
   hoPerson = person; $('#hoSearch').value = '';
@@ -275,7 +286,7 @@ $('#hiSave').onclick = async () => {
   const qty = parseInt($('#hiQty').value || '1', 10);
   if (!(qty > 0)) { toast('Qty must be ≥ 1', 'err'); return; }
   const cost = $('#hiCost').value ? Math.round(parseFloat($('#hiCost').value) * 100) : null;
-  const ok = await insertHat({ kind: 'in', qty, unit_price_cents: cost, note: $('#hiNote').value.trim() || null });
+  const ok = await insertHat({ kind: 'in', hat_type: $('#hiType').value, qty, unit_price_cents: cost, note: $('#hiNote').value.trim() || null });
   if (ok) { toast(`Added ${qty} hat(s) to stock`, 'ok'); $('#hiQty').value = '1'; $('#hiCost').value = ''; $('#hiNote').value = ''; loadHats(); }
 };
 $('#hoSave').onclick = async () => {
@@ -283,7 +294,7 @@ $('#hoSave').onclick = async () => {
   if (!(qty > 0)) { toast('Qty must be ≥ 1', 'err'); return; }
   const free = $('#hoFree').checked;
   const ok = await insertHat({
-    kind: 'out', qty,
+    kind: 'out', hat_type: $('#hoType').value, qty,
     unit_price_cents: free ? 0 : Math.round(parseFloat($('#hoPrice').value || '0') * 100),
     member_price: $('#hoMember').checked && !free,
     payment_method: free ? 'comp' : $('#hoMethod').value,
@@ -311,11 +322,14 @@ async function loadHats() {
   const { data, error } = await sb.from('hat_events').select('*, individuals(full_name)').order('entered_at', { ascending: false }).limit(200);
   const body = $('#hatBody');
   if (error) { body.innerHTML = `<div class="card" style="color:var(--bad)">${esc(error.message)}</div>`; return; }
-  let inTot = 0, outTot = 0;
-  data.forEach(r => { if (r.status === 'active') { if (r.kind === 'in') inTot += r.qty; else outTot += r.qty; } });
-  $('#hatOnHand').textContent = inTot - outTot; $('#hatInTot').textContent = inTot; $('#hatOutTot').textContent = outTot;
+  // per-type on-hand (active rows only); include any legacy type not in HAT_TYPES
+  const tot = {}; HAT_TYPES.forEach(t => tot[t.key] = { in: 0, out: 0 });
+  data.forEach(r => { if (r.status === 'active') { (tot[r.hat_type] ||= { in: 0, out: 0 })[r.kind === 'in' ? 'in' : 'out'] += r.qty; } });
+  let totalOnHand = 0;
+  const cells = Object.keys(tot).map(k => { const oh = tot[k].in - tot[k].out; totalOnHand += oh; return `<div><b>${oh}</b><span class="muted small">${esc(hatTypeLabel(k))}</span></div>`; });
+  $('#hatStat').innerHTML = `<div><b>${totalOnHand}</b><span class="muted small">total in stock</span></div>` + cells.join('');
   if (!data.length) { body.innerHTML = '<div class="card muted">No hat records yet. Add stock or log a hat out above.</div>'; return; }
-  body.innerHTML = '<div class="card" style="padding:0;overflow-x:auto"><table><tr><th>When</th><th>Type</th><th>Qty</th><th>Price</th><th>Customer</th><th>By</th><th></th></tr>' +
+  body.innerHTML = '<div class="card" style="padding:0;overflow-x:auto"><table><tr><th>When</th><th>Move</th><th>Type</th><th>Qty</th><th>Price</th><th>Customer</th><th>By</th><th></th></tr>' +
     data.map(r => {
       const cancelled = r.status === 'cancelled';
       const by = state.profilesMap[r.entered_by]?.name || '';
@@ -333,6 +347,7 @@ async function loadHats() {
       return `<tr style="${cancelled ? 'opacity:.5' : ''}">
         <td class="small muted" style="white-space:nowrap">${esc(new Date(r.entered_at).toLocaleString())}</td>
         <td>${kindPill}${cancelled ? ' <span class="pill new">cancelled</span>' : ''}${cancelInfo}</td>
+        <td class="small">${esc(hatTypeLabel(r.hat_type))}</td>
         <td>${r.qty}</td><td class="small">${price}</td><td class="small">${cust}</td>
         <td class="small">${esc(by)}</td><td>${btn}</td></tr>`;
     }).join('') + '</table></div>';
@@ -527,7 +542,7 @@ function fmtDetail(a, d) {
     return s;
   }
   if (a.startsWith('hat.')) {
-    let s = (d.kind === 'in' ? '＋in' : '－out') + ` ×${d.qty}`;
+    let s = esc(hatTypeLabel(d.hat_type)) + ' · ' + (d.kind === 'in' ? '＋in' : '－out') + ` ×${d.qty}`;
     if (d.payment_method === 'comp') s += ' · FREE';
     else if (d.unit_price_cents != null) s += ' · ' + fmt(d.unit_price_cents) + (d.member_price ? ' mbr' : '');
     if (d.customer) s += ' · ' + esc(d.customer);
