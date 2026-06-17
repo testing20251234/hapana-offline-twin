@@ -97,6 +97,7 @@ const SCREENS = [
   { id: 'newcustomer', label: 'New customer' },
   { id: 'package', label: 'Add package' },
   { id: 'hats', label: 'Hats' },
+  { id: 'corporate', label: 'Corporate' },
   { id: 'import', label: 'Import' },
   { id: 'worklist', label: 'Worklist' },
   { id: 'verify', label: 'Verify', need: r => r === 'verifier' || r === 'both' },
@@ -117,6 +118,7 @@ function navTo(id) {
   $('#screen-' + id)?.classList.remove('hidden');
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.screen === id));
   if (id === 'hats') loadHats();
+  if (id === 'corporate') loadCorporate();
   if (id === 'worklist') loadWorklist();
   if (id === 'verify') loadVerify();
   if (id === 'staff') loadStaff();
@@ -358,6 +360,115 @@ async function loadHats() {
   body.querySelectorAll('[data-uncancel]').forEach(b => b.onclick = () => setHatStatus(b.dataset.uncancel, 'active'));
 }
 
+/* ───────── corporate usage (local only — never ports to Hapana) ───────── */
+let corpCompanies = [];
+async function loadCorpCompanies() {
+  const { data } = await sb.from('corporate_companies').select('*').order('name');
+  corpCompanies = data || [];
+  fillCorpSelects();
+}
+function fillCorpSelects() {
+  const opts = '<option value="">— choose —</option>' +
+    corpCompanies.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const sel = $('#corpSelect'); if (sel) sel.innerHTML = opts;
+  const topup = $('#corpTopupCompany'); if (topup) topup.innerHTML = opts;
+}
+function selectedCompany() {
+  const id = $('#corpSelect').value;
+  return corpCompanies.find(c => c.id === id);
+}
+async function loadCorporate() {
+  const isAdmin = state.profile.role === 'both' || state.profile.is_super;
+  await loadCorpCompanies();
+  $('#corpAdmin')?.classList.toggle('hidden', !isAdmin);
+  const co = selectedCompany();
+  $('#corpCheckinCard')?.classList.toggle('hidden', !co);
+  if (co) {
+    const { data: tx } = await sb.from('corporate_transactions')
+      .select('kind,qty,status').eq('company_id', co.id);
+    let balance = 0;
+    (tx || []).forEach(t => { if (t.status === 'active') balance += t.kind === 'topup' ? t.qty : -t.qty; });
+    $('#corpBalance').innerHTML = `<div class="stat"><div><b>${balance}</b><span class="muted small">credits remaining</span></div></div>`;
+  } else {
+    $('#corpBalance').innerHTML = '';
+  }
+  await loadCorpHistory();
+}
+async function loadCorpHistory() {
+  const co = selectedCompany();
+  const body = $('#corpBody');
+  if (!co) { body.innerHTML = '<div class="card muted">Select a company above to see recent transactions.</div>'; return; }
+  const { data, error } = await sb.from('corporate_transactions')
+    .select('*').eq('company_id', co.id).order('entered_at', { ascending: false }).limit(100);
+  if (error) { body.innerHTML = `<div class="card" style="color:var(--bad)">${esc(error.message)}</div>`; return; }
+  if (!data.length) { body.innerHTML = '<div class="card muted">No transactions yet for this company.</div>'; return; }
+  const isAdmin = state.profile.role === 'both' || state.profile.is_super;
+  body.innerHTML = '<div class="card" style="padding:0;overflow-x:auto"><table><tr><th>When</th><th>Move</th><th>Qty</th><th>Person</th><th>Phone</th><th>Note</th><th>By</th><th></th></tr>' +
+    data.map(r => {
+      const cancelled = r.status === 'cancelled';
+      const by = state.profilesMap[r.entered_by]?.name || '';
+      const kindPill = r.kind === 'topup'
+        ? '<span class="pill ok">＋ top-up</span>'
+        : '<span class="pill">－ usage</span>';
+      const cancelInfo = (cancelled && isAdmin)
+        ? `<div class="muted small">cancelled by ${esc(state.profilesMap[r.cancelled_by]?.name || '—')}${r.cancelled_at ? ' · ' + new Date(r.cancelled_at).toLocaleString() : ''}</div>`
+        : '';
+      const canCancel = isAdmin;
+      const btn = !canCancel ? ''
+        : cancelled
+          ? `<button class="sm ghost" data-uncancel="${r.id}">un-cancel</button>`
+          : `<button class="sm ghost" data-cancel="${r.id}">cancel</button>`;
+      return `<tr style="${cancelled ? 'opacity:.5' : ''}">
+        <td class="small muted" style="white-space:nowrap">${esc(new Date(r.entered_at).toLocaleString())}</td>
+        <td>${kindPill}${cancelled ? ' <span class="pill new">cancelled</span>' : ''}${cancelInfo}</td>
+        <td>${r.qty}</td><td>${esc(r.person_name || '—')}</td><td>${esc(r.person_phone || '—')}</td>
+        <td class="small">${esc(r.note || '')}</td><td class="small">${esc(by)}</td><td>${btn}</td></tr>`;
+    }).join('') + '</table></div>';
+  body.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => {
+    if (confirm('Cancel this transaction? It stays in the log (append-only).')) setCorpTxStatus(b.dataset.cancel, 'cancelled');
+  });
+  body.querySelectorAll('[data-uncancel]').forEach(b => b.onclick = () => setCorpTxStatus(b.dataset.uncancel, 'active'));
+}
+async function insertCorpTx(row) {
+  const { error } = await sb.from('corporate_transactions').insert({ ...row, entered_by: state.user.id });
+  if (error) { toast(error.message, 'err'); return false; }
+  return true;
+}
+async function setCorpTxStatus(id, status) {
+  const { error } = await sb.from('corporate_transactions').update({ status }).eq('id', id);
+  if (error) { toast(error.message, 'err'); return; }
+  toast(status === 'cancelled' ? 'Transaction cancelled' : 'Transaction restored', 'ok');
+  loadCorporate();
+}
+// Event handlers
+$('#corpSave').onclick = async () => {
+  const co = selectedCompany();
+  if (!co) { toast('Select a company', 'err'); return; }
+  const name = $('#corpName').value.trim();
+  if (!name) { toast('Enter the person\'s name', 'err'); return; }
+  const phone = $('#corpPhone').value.trim() || null;
+  const ok = await insertCorpTx({ company_id: co.id, kind: 'usage', qty: 1, person_name: name, person_phone: phone });
+  if (ok) { toast(`1 credit deducted — ${name}`, 'ok'); $('#corpName').value = ''; $('#corpPhone').value = ''; loadCorporate(); }
+};
+$('#corpAddCompany').onclick = async () => {
+  const name = $('#corpNewName').value.trim();
+  if (!name) { toast('Enter a company name', 'err'); return; }
+  const { error } = await sb.from('corporate_companies').insert({ name });
+  if (error) { toast(error.message, 'err'); return; }
+  toast(`Company "${name}" added`, 'ok'); $('#corpNewName').value = ''; loadCorporate();
+};
+$('#corpTopupSave').onclick = async () => {
+  const company_id = $('#corpTopupCompany').value;
+  if (!company_id) { toast('Select a company', 'err'); return; }
+  const qty = parseInt($('#corpTopupQty').value || '1', 10);
+  if (!(qty > 0)) { toast('Qty must be ≥ 1', 'err'); return; }
+  const note = $('#corpTopupNote').value.trim() || null;
+  const ok = await insertCorpTx({ company_id, kind: 'topup', qty, note });
+  if (ok) { toast(`Added ${qty} credit(s)`, 'ok'); $('#corpTopupQty').value = '1'; $('#corpTopupNote').value = ''; loadCorporate(); }
+};
+$('#corpSelect').onchange = () => loadCorporate();
+$('#corpRefresh').onclick = e => { e.preventDefault(); loadCorporate(); };
+
 /* ───────── import ───────── */
 function parseCSV(text) {
   const rows = []; let row = [], field = '', q = false;
@@ -549,6 +660,14 @@ function fmtDetail(a, d) {
     if (d.payment_method === 'comp') s += ' · FREE';
     else if (d.unit_price_cents != null) s += ' · ' + fmt(d.unit_price_cents) + (d.member_price ? ' mbr' : '');
     if (d.customer) s += ' · ' + esc(d.customer);
+    if (d.status === 'cancelled') s += '  [cancelled]';
+    return s;
+  }
+  if (a.startsWith('corporate.')) {
+    let s = esc(d.company_name || '') + ' · ' + (d.kind === 'topup' ? '＋top-up' : '－usage') + ` ×${d.qty}`;
+    if (d.person_name) s += ' · ' + esc(d.person_name);
+    if (d.person_phone) s += ' · ' + esc(d.person_phone);
+    if (d.note) s += ' · ' + esc(d.note);
     if (d.status === 'cancelled') s += '  [cancelled]';
     return s;
   }

@@ -230,6 +230,56 @@
       <div id="hatBody"></div>
     </section>
 
+    <!-- CORPORATE (local only) -->
+    <section id="screen-corporate" class="screen hidden">
+      <div class="section-head"><h2>Corporate usage</h2><span class="muted small">local tracking · does <i>not</i> touch Hapana</span></div>
+
+      <div class="card" style="margin-bottom:1rem">
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:0 1 320px">
+            <label>Company</label>
+            <select id="corpSelect"><option value="">— choose —</option></select>
+          </div>
+          <div id="corpBalance"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1rem" id="corpCheckinCard">
+        <h3 style="margin-bottom:.4rem">Deduct credit</h3>
+        <p class="muted small" style="margin-top:0">General use — one credit per person.</p>
+        <div class="row">
+          <div><label>Person name</label><input id="corpName" placeholder="Full name" /></div>
+          <div><label>Phone number</label><input id="corpPhone" placeholder="Phone" /></div>
+        </div>
+        <div style="height:1rem"></div>
+        <button id="corpSave">Deduct 1 credit</button>
+      </div>
+
+      <div class="row" id="corpAdmin" style="align-items:stretch;margin-bottom:1rem">
+        <div class="card" style="min-width:250px">
+          <h3 style="margin-bottom:.4rem">Add company</h3>
+          <label>Company name</label><input id="corpNewName" placeholder="e.g. Acme Corp" />
+          <div style="height:1rem"></div>
+          <button id="corpAddCompany">Add company</button>
+        </div>
+        <div class="card" style="min-width:250px">
+          <h3 style="margin-bottom:.4rem">Top up credits</h3>
+          <label>Company</label><select id="corpTopupCompany"><option value="">— choose —</option></select>
+          <div style="height:.6rem"></div>
+          <div class="row">
+            <div style="max-width:120px"><label>Qty</label><input id="corpTopupQty" type="number" min="1" step="1" value="1" /></div>
+            <div style="max-width:200px"><label>Note (optional)</label><input id="corpTopupNote" placeholder="e.g. invoice ref" /></div>
+          </div>
+          <div style="height:1rem"></div>
+          <button id="corpTopupSave">Add credits</button>
+        </div>
+      </div>
+
+      <div class="section-head" style="margin-top:1.5rem"><h3>Recent transactions</h3>
+        <span class="muted small">append-only · cancel keeps the record · <a href="#" id="corpRefresh">refresh</a></span></div>
+      <div id="corpBody"></div>
+    </section>
+
     <!-- IMPORT -->
     <section id="screen-import" class="screen hidden">
       <div class="section-head"><h2>Daily import</h2><span class="muted small">~21:10 check-in CSV · only-add-new</span></div>
@@ -276,6 +326,6 @@
 window.SUPA_URL = "https://escyonbsziqcqltceyxr.supabase.co";
 window.SUPA_KEY = "sb_publishable_mHkvAtu6M-yP75U6L0hgwg_yjWt75_P";
 </script>
-<script src="app.js?v=20260609c"></script>
+<script src="app.js?v=20260617a"></script>
 </body>
 </html>
