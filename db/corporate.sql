@@ -116,6 +116,26 @@ drop trigger if exists trg_audit_corporate on public.corporate_transactions;
 create trigger trg_audit_corporate after insert or update on public.corporate_transactions
   for each row execute function public.trg_audit_corporate_fn();
 
+-- Audit company creation (migration corporate_audit_company_create). companies are insert-only
+-- via API (no update/delete policy), so AFTER INSERT only → audit_log 'corporate.company_create'.
+create or replace function public.trg_audit_corp_company_fn()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  insert into public.audit_log (actor, actor_name, action, detail, at)
+  values (auth.uid(), (select name from public.profiles where id = auth.uid()),
+    'corporate.company_create', jsonb_build_object('company_name', new.name), now());
+  return new;
+end;
+$$;
+revoke all on function public.trg_audit_corp_company_fn() from public, anon, authenticated;
+drop trigger if exists trg_audit_corp_company on public.corporate_companies;
+create trigger trg_audit_corp_company after insert on public.corporate_companies
+  for each row execute function public.trg_audit_corp_company_fn();
+
 alter table public.corporate_companies    enable row level security;
 alter table public.corporate_transactions enable row level security;
 

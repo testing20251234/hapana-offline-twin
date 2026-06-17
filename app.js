@@ -362,6 +362,7 @@ async function loadHats() {
 
 /* ───────── corporate usage (local only — never ports to Hapana) ───────── */
 let corpCompanies = [];
+let corpCurrentBalance = null;   // balance of the selected company (for overdraw soft-warn)
 async function loadCorpCompanies() {
   const { data } = await sb.from('corporate_companies').select('*').order('name');
   corpCompanies = data || [];
@@ -391,8 +392,10 @@ async function loadCorporate() {
       .select('kind,qty,status').eq('company_id', co.id);
     let balance = 0;
     (tx || []).forEach(t => { if (t.status === 'active') balance += t.kind === 'topup' ? t.qty : -t.qty; });
+    corpCurrentBalance = balance;
     $('#corpBalance').innerHTML = `<div class="stat"><div><b>${balance}</b><span class="muted small">credits remaining</span></div></div>`;
   } else {
+    corpCurrentBalance = null;
     $('#corpBalance').innerHTML = '';
   }
   await loadCorpHistory();
@@ -450,6 +453,10 @@ $('#corpSave').onclick = async () => {
   const name = $('#corpName').value.trim();
   if (!name) { toast('Enter the person\'s name', 'err'); return; }
   const phone = $('#corpPhone').value.trim() || null;
+  // Overdraw soft-warn: prepaid pool, so surface a zero/negative balance — but trust still wins on confirm.
+  if (corpCurrentBalance !== null && corpCurrentBalance <= 0) {
+    if (!confirm(`${co.name} has no credits left (balance: ${corpCurrentBalance}). Deduct anyway → ${corpCurrentBalance - 1}?`)) return;
+  }
   const ok = await insertCorpTx({ company_id: co.id, kind: 'usage', qty: 1, person_name: name, person_phone: phone });
   if (ok) { toast(`1 credit deducted — ${name}`, 'ok'); $('#corpName').value = ''; $('#corpPhone').value = ''; loadCorporate(); }
 };
@@ -666,6 +673,7 @@ function fmtDetail(a, d) {
     if (d.status === 'cancelled') s += '  [cancelled]';
     return s;
   }
+  if (a === 'corporate.company_create') return esc(d.company_name || '') + ' · company added';
   if (a.startsWith('corporate.')) {
     let s = esc(d.company_name || '') + ' · ' + (d.kind === 'topup' ? '＋top-up' : '－usage') + ` ×${d.qty}`;
     if (d.person_name) s += ' · ' + esc(d.person_name);
