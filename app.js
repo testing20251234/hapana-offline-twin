@@ -370,8 +370,11 @@ async function loadCorpCompanies() {
 function fillCorpSelects() {
   const opts = '<option value="">— choose —</option>' +
     corpCompanies.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  const sel = $('#corpSelect'); if (sel) sel.innerHTML = opts;
-  const topup = $('#corpTopupCompany'); if (topup) topup.innerHTML = opts;
+  // Preserve the current selection across the innerHTML rebuild — otherwise picking a
+  // company fires onchange → loadCorporate → fillCorpSelects, which reset the <select>
+  // back to "— choose —" and the screen looked dead.
+  const sel = $('#corpSelect'); if (sel) { const v = sel.value; sel.innerHTML = opts; sel.value = v; }
+  const topup = $('#corpTopupCompany'); if (topup) { const v = topup.value; topup.innerHTML = opts; topup.value = v; }
 }
 function selectedCompany() {
   const id = $('#corpSelect').value;
